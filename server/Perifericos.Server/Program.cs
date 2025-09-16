@@ -65,6 +65,18 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
+// CORS Configuration
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowSpecificOrigins", policy =>
+    {
+        policy.WithOrigins("https://ffperifericos.in9automacao.com.br", "http://ffperifericos.in9automacao.com.br")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials(); // Necessário para SignalR
+    });
+});
+
 // App services
 builder.Services.AddScoped<DeviceService>();
 
@@ -108,7 +120,7 @@ app.UseSwaggerUI();
 
 app.UseSerilogRequestLogging();
 app.UseRouting();
-app.UseCors();
+app.UseCors("AllowSpecificOrigins"); // Usar a policy específica
 app.UseAuthentication();
 app.UseAuthorization();
 
