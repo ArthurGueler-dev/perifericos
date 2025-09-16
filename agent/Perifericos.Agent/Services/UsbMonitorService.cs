@@ -100,6 +100,10 @@ public class UsbMonitorService : BackgroundService
             var instanceId = device["PNPDeviceID"]?.ToString() ?? string.Empty;
             var name = device["Name"]?.ToString() ?? "USB Device";
 
+            // Filtrar apenas dispositivos relevantes
+            if (!IsRelevantDevice(instanceId, name))
+                continue;
+
             // Try parse VID, PID, SN from InstanceId like: USB\\VID_046D&PID_C534&MI_00\\7&2a5a...&0&0000
             string vendorId = Extract(instanceId, "VID_");
             string productId = Extract(instanceId, "PID_");
@@ -107,6 +111,69 @@ public class UsbMonitorService : BackgroundService
 
             yield return new DeviceInfo(vendorId, productId, serial, instanceId, name);
         }
+    }
+
+    private static bool IsRelevantDevice(string instanceId, string name)
+    {
+        // Ignorar dispositivos internos do sistema
+        var ignorePatterns = new[]
+        {
+            "ROOT_HUB", "USB ROOT HUB", "Generic USB Hub",
+            "Composite Device", "USB Composite Device",
+            "Audio Device", "Realtek", "Intel", "AMD",
+            "Bluetooth", "WiFi", "Ethernet", "Network",
+            "Webcam", "Camera", "Microphone",
+            "Card Reader", "SD Card", "MMC",
+            "Host Controller", "xHCI", "EHCI", "OHCI", "UHCI"
+        };
+
+        // Incluir apenas dispositivos interessantes
+        var includePatterns = new[]
+        {
+            "Mouse", "Keyboard", "Teclado",
+            "Storage", "Mass Storage", "Disk", "Drive",
+            "Printer", "Scanner", "Joystick", "Gamepad",
+            "Razer", "Logitech", "Microsoft", "Corsair",
+            "HID-compliant", "USB Input Device"
+        };
+
+        var nameUpper = name.ToUpperInvariant();
+        var instanceUpper = instanceId.ToUpperInvariant();
+
+        // Se contém padrões a ignorar, pular
+        if (ignorePatterns.Any(pattern => 
+            nameUpper.Contains(pattern.ToUpperInvariant()) || 
+            instanceUpper.Contains(pattern.ToUpperInvariant())))
+        {
+            return false;
+        }
+
+        // Se contém padrões relevantes, incluir
+        if (includePatterns.Any(pattern => 
+            nameUpper.Contains(pattern.ToUpperInvariant()) || 
+            instanceUpper.Contains(pattern.ToUpperInvariant())))
+        {
+            return true;
+        }
+
+        // Incluir dispositivos com VendorID de marcas conhecidas
+        var knownVendors = new[]
+        {
+            "VID_1532", // Razer
+            "VID_046D", // Logitech  
+            "VID_045E", // Microsoft
+            "VID_1B1C", // Corsair
+            "VID_0781", // SanDisk
+            "VID_058F", // Alcor Micro (pendrives)
+            "VID_0951"  // Kingston
+        };
+
+        if (knownVendors.Any(vendor => instanceUpper.Contains(vendor)))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static string Extract(string input, string key)
