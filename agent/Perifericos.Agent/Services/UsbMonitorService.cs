@@ -15,6 +15,8 @@ public class UsbMonitorService : BackgroundService
     private readonly AgentOptions _options;
     private ManagementEventWatcher? _arrivalWatcher;
     private ManagementEventWatcher? _removalWatcher;
+    private readonly Dictionary<string, DateTime> _lastEventTime = new();
+    private readonly TimeSpan _debounceInterval = TimeSpan.FromSeconds(3);
 
     public UsbMonitorService(ILogger<UsbMonitorService> logger, PopupNotifier notifier, ApiClient api, AuthorizedDevicesCache authorized, IOptions<AgentOptions> options)
     {
@@ -68,6 +70,30 @@ public class UsbMonitorService : BackgroundService
         {
             foreach (var device in EnumerateUsbDevices())
             {
+                // Debounce: evitar eventos duplicados do mesmo dispositivo
+                var deviceKey = $"{device.VendorId}:{device.ProductId}:{device.SerialNumber}:{eventType}";
+                var now = DateTime.UtcNow;
+                
+                if (_lastEventTime.TryGetValue(deviceKey, out var lastTime))
+                {
+                    if (now - lastTime < _debounceInterval)
+                    {
+                        continue; // Pular evento duplicado
+                    }
+                }
+                
+                _lastEventTime[deviceKey] = now;
+                
+                // Limpar eventos antigos do cache (manter apenas últimos 10 minutos)
+                var keysToRemove = _lastEventTime
+                    .Where(kvp => now - kvp.Value > TimeSpan.FromMinutes(10))
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+                foreach (var key in keysToRemove)
+                {
+                    _lastEventTime.Remove(key);
+                }
+
                 var dto = new EventDto
                 {
                     PcIdentifier = _options.PcIdentifier,
@@ -115,30 +141,23 @@ public class UsbMonitorService : BackgroundService
 
     private static bool IsRelevantDevice(string instanceId, string name)
     {
-        // Ignorar dispositivos internos do sistema
-        var ignorePatterns = new[]
-        {
-            "ROOT_HUB", "USB ROOT HUB", "Generic USB Hub",
-            "Composite Device", "USB Composite Device",
-            "Audio Device", "Realtek", "Intel", "AMD",
-            "Bluetooth", "WiFi", "Ethernet", "Network",
-            "Webcam", "Camera", "Microphone",
-            "Card Reader", "SD Card", "MMC",
-            "Host Controller", "xHCI", "EHCI", "OHCI", "UHCI"
-        };
-
-        // Incluir apenas dispositivos interessantes
-        var includePatterns = new[]
-        {
-            "Mouse", "Keyboard", "Teclado",
-            "Storage", "Mass Storage", "Disk", "Drive",
-            "Printer", "Scanner", "Joystick", "Gamepad",
-            "Razer", "Logitech", "Microsoft", "Corsair",
-            "HID-compliant", "USB Input Device"
-        };
-
         var nameUpper = name.ToUpperInvariant();
         var instanceUpper = instanceId.ToUpperInvariant();
+
+        // PRIMEIRO: Ignorar dispositivos internos/sistema (mais restritivo)
+        var ignorePatterns = new[]
+        {
+            "ROOT_HUB", "USB ROOT HUB", "Generic USB Hub", "USB HUB",
+            "Composite Device", "USB Composite Device", 
+            "Audio Device", "Realtek", "Intel", "AMD", "VIA", "NVIDIA",
+            "Bluetooth", "WiFi", "Ethernet", "Network", "Wireless",
+            "Webcam", "Camera", "Microphone", "Audio",
+            "Card Reader", "SD Card", "MMC", "Smart Card",
+            "Host Controller", "xHCI", "EHCI", "OHCI", "UHCI",
+            "HID Keyboard Device", "HID-compliant system", 
+            "USB Receiver", "Unifying", "Wireless Receiver",
+            "MI_", "Collection", "Consumer Control", "System Control"
+        };
 
         // Se contém padrões a ignorar, pular
         if (ignorePatterns.Any(pattern => 
@@ -148,28 +167,47 @@ public class UsbMonitorService : BackgroundService
             return false;
         }
 
-        // Se contém padrões relevantes, incluir
-        if (includePatterns.Any(pattern => 
-            nameUpper.Contains(pattern.ToUpperInvariant()) || 
-            instanceUpper.Contains(pattern.ToUpperInvariant())))
+        // SEGUNDO: Incluir APENAS dispositivos muito específicos
+        var specificDevices = new[]
+        {
+            // Mouses específicos
+            "RAZER", "LOGITECH MOUSE", "MICROSOFT MOUSE", 
+            // Teclados específicos  
+            "RAZER KEYBOARD", "LOGITECH KEYBOARD", "MICROSOFT KEYBOARD",
+            // Storage específico
+            "MASS STORAGE", "USB DISK", "FLASH DRIVE", "SANDISK", "KINGSTON",
+            // Impressoras
+            "PRINTER", "HP ", "CANON", "EPSON"
+        };
+
+        // Incluir apenas se nome contém dispositivos específicos
+        if (specificDevices.Any(device => nameUpper.Contains(device)))
         {
             return true;
         }
 
-        // Incluir dispositivos com VendorID de marcas conhecidas
-        var knownVendors = new[]
+        // TERCEIRO: VendorIDs muito específicos de periféricos externos
+        var peripheralVendors = new[]
         {
-            "VID_1532", // Razer
-            "VID_046D", // Logitech  
-            "VID_045E", // Microsoft
-            "VID_1B1C", // Corsair
+            "VID_1532", // Razer (apenas se não for receiver/wireless)
+            "VID_046D", // Logitech (apenas se for mouse/teclado direto)
             "VID_0781", // SanDisk
-            "VID_058F", // Alcor Micro (pendrives)
-            "VID_0951"  // Kingston
+            "VID_0951", // Kingston
+            "VID_058F"  // Alcor Micro (pendrives)
         };
 
-        if (knownVendors.Any(vendor => instanceUpper.Contains(vendor)))
+        if (peripheralVendors.Any(vendor => instanceUpper.Contains(vendor)))
         {
+            // Para Razer e Logitech, ser ainda mais específico
+            if (instanceUpper.Contains("VID_1532") || instanceUpper.Contains("VID_046D"))
+            {
+                // Apenas se o nome não contém "receiver", "wireless", "unifying"
+                if (nameUpper.Contains("RECEIVER") || nameUpper.Contains("WIRELESS") || 
+                    nameUpper.Contains("UNIFYING") || nameUpper.Contains("DONGLE"))
+                {
+                    return false;
+                }
+            }
             return true;
         }
 
