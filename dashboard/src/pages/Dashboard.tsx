@@ -21,7 +21,7 @@ export default function Dashboard() {
   }, [])
 
   const hubUrl = useMemo(() => {
-    const base = import.meta.env.VITE_API_BASE ?? 'https://api.in9automacao.com.br'
+    const base = import.meta.env.VITE_API_BASE ?? 'https://apiperifericos.in9automacao.com.br'
     const token = localStorage.getItem('token')
     return `${base}/hubs/alerts?access_token=${token}`
   }, [])
