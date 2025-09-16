@@ -1,0 +1,23 @@
+[Unit]
+Description=Perifericos API
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/var/www/perifericos-api/Perifericos.Server
+WorkingDirectory=/var/www/perifericos-api
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=perifericos-api
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://localhost:5099
+Environment=ConnectionStrings__Default=Data Source=/var/www/perifericos-api/perifericos.db
+Environment=Jwt__Key=sua-chave-jwt-32-caracteres-minimo-prod
+Environment=Jwt__Issuer=PerifericosServer
+Environment=Jwt__Audience=PerifericosDashboard
+
+[Install]
+WantedBy=multi-user.target
