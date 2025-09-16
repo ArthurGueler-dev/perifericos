@@ -1,0 +1,29 @@
+COMO INSTALAR O AGENT EM OUTRO PC:
+
+1. COPIE ESTA PASTA INTEIRA para o outro PC (ex: C:\PerifericosAgent\)
+
+2. ABRA PowerShell COMO ADMINISTRADOR no outro PC
+
+3. NAVEGUE para a pasta:
+   cd C:\PerifericosAgent
+
+4. EXECUTE o Agent:
+   .\Perifericos.Agent.exe
+
+5. CONFIGURAÇÃO:
+   - O PC será identificado como "PC-TESTE-002"
+   - Para mudar, edite o arquivo appsettings.json
+   - Mude "PcIdentifier" para um nome único (ex: "PC-NOTEBOOK-JOAO")
+
+6. TESTAR:
+   - Conecte um dispositivo USB (mouse, pendrive, etc.)
+   - Deve aparecer nos eventos do dashboard
+   - Se for dispositivo não autorizado, aparecerá pop-up
+
+7. INSTALAR COMO SERVIÇO (opcional):
+   sc create "PerifericosAgent" binPath="C:\PerifericosAgent\Perifericos.Agent.exe"
+   sc start "PerifericosAgent"
+
+IMPORTANTE:
+- Execute como Administrador para detectar dispositivos USB
+- Certifique-se que o PC tem internet para conectar com a API

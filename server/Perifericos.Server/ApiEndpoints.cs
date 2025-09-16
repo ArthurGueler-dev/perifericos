@@ -74,6 +74,10 @@ public static class ApiEndpoints
         group.MapDelete("assignments/{id}", async (AppDbContext db, int id) => { var a = await db.PeripheralAssignments.FindAsync(id); if (a==null) return Results.NotFound(); db.Remove(a); await db.SaveChangesAsync(); return Results.NoContent(); });
 
         group.MapGet("events", async (AppDbContext db, int take = 200) => await db.DeviceEvents.OrderByDescending(e => e.TimestampUtc).Take(take).ToListAsync());
+        group.MapDelete("events", async (AppDbContext db) => { 
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM DeviceEvents");
+            return Results.Ok(new { message = "Todos os eventos foram removidos" });
+        });
         return group;
     }
 }
